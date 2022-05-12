@@ -13,25 +13,41 @@
 #define CLK_PIN 4
 MD_MAX72XX myDisplay = MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
 
+/* other useful pins */
+#define POTENTIOMETER A0
+
 /*
  * declare the matrix that represents the tetris game board
  * 8 rows and 32 columns (4 * 8x8 matrices)
  */
 #define ROWS 8
 #define COLUMNS 32
+#define MAX_PIECE_SIZE 4
 int board[8][32];
+
+/* structure that defines the position of the piece */
+typedef struct moving_piece_struct {
+  int size_piece;
+  int x[2 * MAX_PIECE_SIZE];
+  int y[2 * MAX_PIECE_SIZE];
+} moving_piece;
 
 /* auxiliary for the piece generation */
 int piece[ROWS][ROWS];
 
 /* count for piece generation */
-int count;
+int stopped;
 int first_it;
+int speed_pieces;
+
+/* piece that is currently moving */
+moving_piece piece_mov;
 
 void generateRandomPiece();
 void displayMatrix();
 void putPieceInMatrix();
 void MovePieces();
+void printMatrixSerial();
 
 void setup() {
   /* Intialize the object: */
@@ -53,34 +69,77 @@ void setup() {
   /* begin serial for debugging */
   Serial.begin(9600);
 
-  /* initialize counter for piece generation */
-  count = 0;
+  /*
+   * tells when the moving piece reached the
+   * bottom and another one can be created
+   */
+  stopped = 1;
   /* tells if it is the first iteration */
   first_it = 1;
 }
 
 void loop() {
-  if (count == 8 || first_it == 1) {
+  if (stopped == 1 || first_it == 1) {
     generateRandomPiece();
     putPieceInMatrix();
     first_it = 0;
+    stopped = 0;
   }
-  
-  count++;
-  if (count == 9)
-    count = 0;
 
   displayMatrix();
+  displayPiece();
   movePieces();
-  delay(1000);
+  delay(speed_pieces);
+
+//  printMatrixSerial();
+
+  speed_pieces = analogRead(POTENTIOMETER);
+//  Serial.println(speed_pieces);
+}
+
+int checkIntersectionOfPiece() {
+  /* declare auxiliaries */
+  int x, y;
+  
+  for (int i = 0; i < piece_mov.size_piece; i++) {
+    x = piece_mov.x[i];
+    y = piece_mov.y[i];
+    if (y == COLUMNS - 1)
+      return true;
+    else if (board[x][y + 1] == 1)
+      return true;
+  }
+  return false;
+}
+
+void stopPiece() {
+  /* declare auxiliaries */
+  int x, y;
+  
+  for (int i = 0; i < piece_mov.size_piece; i++) {
+    x = piece_mov.x[i];
+    y = piece_mov.y[i];
+    board[x][y] = 1;
+  }
+  piece_mov.size_piece = 0;
+  stopped = 1;
 }
 
 /* In this function I move the pieces */
 void movePieces() {
+  if (checkIntersectionOfPiece()) {
+    stopPiece();
+  }
   for (int i = 0; i < ROWS; i++) {
     for (int j = COLUMNS - 1; j >= 1; j--) {
-      board[i][j] = board[i][j - 1];
+      if (board[i][j - 1] == 2) {
+        board[i][j] = board[i][j - 1];
+        board[i][j - 1] = 0;
+      }
     }
+  }
+  for (int i = 0; i < piece_mov.size_piece; i++) {
+    piece_mov.y[i]++;
   }
   for (int i = 0; i < ROWS; i++) {
     board[i][0] = 0; 
@@ -99,26 +158,44 @@ void displayMatrix() {
         if (board[j][i * ROWS + k])
           row ^= (1 << k);
       }
-      if (i == 0)
-      Serial.println(row);
       myDisplay.setRow(i, i, j, row);
     }
   }
+}
+
+/* function to check if the game has been lost */
+int checkIfLost() {
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < ROWS; j++) {
+      if (board[i][j] != 0 && piece[i][j] == 2)
+        return true;
+    }
+  }
+  return false;
 }
 
 /* this function replaces the first
  * matrix with the one with the piece
  */
 void putPieceInMatrix() {
+  int iterator = 0;
+
+  if (checkIfLost()) {
+    Serial.println("You lost!");
+    while (1);
+  }
+  
   for (int i = 0; i < ROWS; i++) {
     for (int j = 0; j < ROWS; j++) {
-      board[i][j] = piece[i][j];
-      Serial.print(piece[i][j]);
-      Serial.print(" ");
+      if (piece[i][j] == 2) {
+        board[i][j] = piece[i][j];
+        piece_mov.x[iterator] = i;
+        piece_mov.y[iterator] = j;
+        iterator++;
+      }
     }
-    Serial.println("\n");
   }
-  Serial.println("\n");
+  piece_mov.size_piece = iterator;
 }
 
 /*
@@ -140,13 +217,13 @@ void generateRandomPiece() {
   }
 
   /* starting_point */
-  starting_point = random(0, 8);
-  piece[starting_point][0] = 1;
+  starting_point = random(0, ROWS);
+  piece[starting_point][0] = 2;
   
-  vertical = random(2, 4);
+  vertical = random(2, MAX_PIECE_SIZE);
   if (vertical == 0)
     vertical++;
-  horizontal = random(2, 4);
+  horizontal = random(2, MAX_PIECE_SIZE);
   if (horizontal == 0)
     horizontal++;
   if (starting_point + vertical >= ROWS) {
@@ -156,10 +233,33 @@ void generateRandomPiece() {
 
   /* iterate over the next columns */
   for (int i = 0; i < horizontal; i++) {
-      piece[starting_point][i] = 1;
+      piece[starting_point][i] = 2;
       if (intersection_point == i) {
         for (int j = 0; j < vertical; j++)
-          piece[starting_point + j][i] = 1;
+          piece[starting_point + j][i] = 2;
       }
   }
+}
+
+void printMatrixSerial() {
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      Serial.print(board[i][j]);
+      Serial.print(" ");
+    }
+    Serial.println();
+  }
+  Serial.println();
+  Serial.println();
+}
+
+void displayPiece() {
+  for (int i = 0; i < piece_mov.size_piece; i++) {
+    Serial.print("(");
+    Serial.print(piece_mov.x[i]);
+    Serial.print(", ");
+    Serial.print(piece_mov.y[i]);
+    Serial.print(") ");
+  }
+  Serial.println();
 }
