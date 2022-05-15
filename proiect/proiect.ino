@@ -43,6 +43,7 @@ typedef struct moving_piece_struct {
   int y[2 * MAX_PIECE_SIZE];
   /* the length of the piece */
   int horizontal;
+  int vertical;
 } moving_piece;
 
 /* auxiliary for the piece generation */
@@ -81,6 +82,8 @@ void displayMatrix();
 void putPieceInMatrix();
 void MovePieces();
 void printMatrixSerial();
+void givePrize();
+void reset_game();
 
 void setup() {
   /* Intialize the object: */
@@ -107,11 +110,15 @@ void setup() {
    * bottom and another one can be created
    */
   stopped = 1;
+  
   /* tells if it is the first iteration */
   first_it = 1;
 
   /* game not started yet */
   game_started = 0;
+
+  /* game not lost and not won */
+  win_lose = 0;
 
   speed_pieces = analogRead(POTENTIOMETER);
 
@@ -195,7 +202,9 @@ void loop() {
       lcd.setCursor(0, 1);
       lcd.print("You Won!");
       win_score = 1;
-      while (1);
+      delay(5000);
+      givePrize();
+      reset_game();
     }
 
     if (win_score == 2) {
@@ -204,7 +213,8 @@ void loop() {
       lcd.print("Bad Luck...");
       lcd.setCursor(0, 1);
       lcd.print("You Lost:(");
-      while (1);
+      delay(5000);
+      reset_game();
     }
     
     if (stopped == 1 || first_it == 1) {
@@ -232,8 +242,16 @@ void loop() {
     movePieces();
     delay(speed_pieces);
 
-    //  printMatrixSerial();
+//      printMatrixSerial();
   }
+}
+
+void givePrize() {
+  
+}
+
+void reset_game() {
+  setup();
 }
 
 int checkIntersectionOfPiece() {
@@ -262,6 +280,166 @@ void stopPiece() {
   }
   piece_mov.size_piece = 0;
   stopped = 1;
+}
+
+int checkRotate() {
+  return true;
+}
+
+int matrix_rotated[ROWS][COLUMNS];
+
+int rotateRight() {
+  int found_col1 = 0, found_col2 = 0;
+  int start_col1 = 0, start_col2 = COLUMNS - 1;
+
+  while (found_col1 == 0 || found_col2 == 0) {
+    for (int i = 0; i < ROWS; i++) {
+      if (board[i][start_col1] == 2)
+        found_col1 = 1;
+      if (board[i][start_col2] == 2)
+        found_col2 = 1;
+    }
+    if (found_col1 == 0)
+      start_col1++;
+    if (found_col2 == 0)
+      start_col2--;
+  }
+
+  int found_row1 = 0, found_row2 = 0;
+  int start_row1 = 0, start_row2 = ROWS - 1;
+
+  while (found_row1 == 0 || found_row2 == 0) {
+    for (int i = start_col1; i <= start_col2; i++) {
+      if (board[start_row1][i] == 2)
+        found_row1 = 1;
+      if (board[start_row2][i] == 2)
+        found_row2 = 1;
+    }
+    if (found_row1 == 0)
+      start_row1++;
+    if (found_row2 == 0)
+      start_row2--;
+  }
+
+  for (int i = start_row1; i <= start_row1 + (start_col2 - start_col1); i++) {
+    for (int j = start_col1; j <= start_col1 + (start_row2 - start_row1); j++) {
+      matrix_rotated[i][j] = board[start_row1 + (j - start_col1)][start_col2 - (i - start_row1)];
+    }
+  }
+
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      if (board[i][j] == 2)
+        board[i][j] = 0;
+      if (matrix_rotated[i][j] == 2) {
+        board[i][j] = 2;
+      }
+    }
+  }
+  
+  /* reinitialize matrix and matrix rotated */
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      matrix_rotated[i][j] = 0;
+    }
+  }
+
+  int iterator = 0;
+
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      if (board[i][j] == 2) {
+        piece_mov.x[iterator] = i;
+        piece_mov.y[iterator] = j;
+        iterator++;
+      }
+    }
+  }
+
+  piece_mov.size_piece = iterator;
+
+  int auxiliary = piece_mov.horizontal;
+  piece_mov.horizontal = piece_mov.vertical;
+  piece_mov.vertical = auxiliary;
+  return true;
+}
+
+int rotateLeft() {
+  int found_col1 = 0, found_col2 = 0;
+  int start_col1 = 0, start_col2 = COLUMNS - 1;
+
+  while (found_col1 == 0 || found_col2 == 0) {
+    for (int i = 0; i < ROWS; i++) {
+      if (board[i][start_col1] == 2)
+        found_col1 = 1;
+      if (board[i][start_col2] == 2)
+        found_col2 = 1;
+    }
+    if (found_col1 == 0)
+      start_col1++;
+    if (found_col2 == 0)
+      start_col2--;
+  }
+
+  int found_row1 = 0, found_row2 = 0;
+  int start_row1 = 0, start_row2 = ROWS - 1;
+
+  while (found_row1 == 0 || found_row2 == 0) {
+    for (int i = start_col1; i <= start_col2; i++) {
+      if (board[start_row1][i] == 2)
+        found_row1 = 1;
+      if (board[start_row2][i] == 2)
+        found_row2 = 1;
+    }
+    if (found_row1 == 0)
+      start_row1++;
+    if (found_row2 == 0)
+      start_row2--;
+  }
+
+  // TODO
+  // Asta trebuie modificata
+  for (int i = start_row1; i <= start_row1 + (start_col2 - start_col1); i++) {
+    for (int j = start_col1; j <= start_col1 + (start_row2 - start_row1); j++) {
+      matrix_rotated[i][j] = board[start_row2 - (j - start_col1)][start_col2 - (i - start_row1)];
+    }
+  }
+
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      if (board[i][j] == 2)
+        board[i][j] = 0;
+      if (matrix_rotated[i][j] == 2) {
+        board[i][j] = 2;
+      }
+    }
+  }
+  
+  /* reinitialize matrix and matrix rotated */
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      matrix_rotated[i][j] = 0;
+    }
+  }
+
+  int iterator = 0;
+
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      if (board[i][j] == 2) {
+        piece_mov.x[iterator] = i;
+        piece_mov.y[iterator] = j;
+        iterator++;
+      }
+    }
+  }
+
+  piece_mov.size_piece = iterator;
+
+  int auxiliary = piece_mov.horizontal;
+  piece_mov.horizontal = piece_mov.vertical;
+  piece_mov.vertical = auxiliary;
+  return true;
 }
 
 int checkLeftMove() {
@@ -365,6 +543,14 @@ void movePieces() {
     if (checkRightMove()) {
       MovePieceRight();
     }
+  } else if (left_rotate == 1) {
+    if (checkRotate()) {
+      rotateLeft();
+    }
+  } else if (right_rotate == 1) {
+    if (checkRotate()) {
+      rotateRight();
+    }
   }
   if (checkIntersectionOfPiece()) {
     stopPiece();
@@ -417,11 +603,8 @@ int checkIfLost() {
 void putPieceInMatrix() {
   int iterator = 0;
 
-  if (checkIfLost()) {
-//    Serial.println("You lost!");
+  if (checkIfLost())
     win_score = 2;
-    while (1);
-  }
 
   for (int i = 0; i < piece_mov.size_piece; i++) {
     piece_mov.y[i] -= piece_mov.horizontal;
@@ -476,6 +659,7 @@ void generateRandomPiece() {
   }
   piece_mov.size_piece = iterator;
   piece_mov.horizontal = horizontal;
+  piece_mov.vertical = vertical;
 }
 
 void printMatrixSerial() {
