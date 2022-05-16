@@ -24,6 +24,9 @@ MD_MAX72XX myDisplay = MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_
 #define ROTATE_RIGHT 50
 #define START_STOP 52
 
+#define PIN1_MOTOR 9
+#define PIN2_MOTOR 10
+
 /* lcd display */
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -48,6 +51,9 @@ typedef struct moving_piece_struct {
 
 /* auxiliary for the piece generation */
 int piece[ROWS][ROWS];
+
+/* auxiliary for rotation */
+int matrix_rotated[ROWS][COLUMNS];
 
 /* count for piece generation */
 int stopped;
@@ -131,6 +137,13 @@ void setup() {
   lcd.print("Hello! Select");
   lcd.setCursor(0, 1);
   lcd.print("your difficulty");
+
+  /* set up the motor */
+  pinMode(PIN1_MOTOR, OUTPUT);
+  pinMode(PIN2_MOTOR, OUTPUT);
+
+  analogWrite(PIN1_MOTOR, 0);
+  analogWrite(PIN2_MOTOR, 0);
 }
 
 void loop() {
@@ -232,22 +245,30 @@ void loop() {
     left_move = digitalRead(MOVE_LEFT);
     /* read the state of the move right button */
     right_move = digitalRead(MOVE_RIGHT);
-    // TODO -> matrice de incadrare
     /* read the state of the rotate left button */
     left_rotate = digitalRead(ROTATE_LEFT);
     /* read the state of the rotate right button */
     right_rotate = digitalRead(ROTATE_RIGHT);
   
-    //  displayPiece();
     movePieces();
     delay(speed_pieces);
-
-//      printMatrixSerial();
   }
 }
 
 void givePrize() {
-  
+  int time_begin = millis();
+
+  analogWrite(PIN1_MOTOR, 0);
+  analogWrite(PIN2_MOTOR, 150);
+
+  delay(200);
+  time_begin = millis();
+  analogWrite(PIN1_MOTOR, 150);
+  analogWrite(PIN2_MOTOR, 0);
+
+  delay(200);
+  analogWrite(PIN1_MOTOR, 0);
+  analogWrite(PIN2_MOTOR, 0);
 }
 
 void reset_game() {
@@ -282,13 +303,14 @@ void stopPiece() {
   stopped = 1;
 }
 
-int checkRotate() {
-  return true;
-}
-
-int matrix_rotated[ROWS][COLUMNS];
-
 int rotateRight() {
+  /* reinitialize matrix and matrix rotated */
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      matrix_rotated[i][j] = 0;
+    }
+  }
+  
   int found_col1 = 0, found_col2 = 0;
   int start_col1 = 0, start_col2 = COLUMNS - 1;
 
@@ -319,11 +341,24 @@ int rotateRight() {
       start_row1++;
     if (found_row2 == 0)
       start_row2--;
+
+    if (start_row1 >= COLUMNS)
+      return false;
   }
 
   for (int i = start_row1; i <= start_row1 + (start_col2 - start_col1); i++) {
     for (int j = start_col1; j <= start_col1 + (start_row2 - start_row1); j++) {
+      if (i >= ROWS || i < 0 || j < 0 || j >= COLUMNS)
+        return false;
+      if (start_row1 + (j - start_col1) < 0 || start_row1 + (j - start_col1) >= ROWS)
+        return false;
+      if (start_col2 - (i - start_row1) < 0 || start_col2 - (i - start_row1) >= COLUMNS)
+        return false;
+      
       matrix_rotated[i][j] = board[start_row1 + (j - start_col1)][start_col2 - (i - start_row1)];
+      
+      if (matrix_rotated[i][j] == 1)
+        return false;
     }
   }
 
@@ -334,13 +369,6 @@ int rotateRight() {
       if (matrix_rotated[i][j] == 2) {
         board[i][j] = 2;
       }
-    }
-  }
-  
-  /* reinitialize matrix and matrix rotated */
-  for (int i = 0; i < ROWS; i++) {
-    for (int j = 0; j < COLUMNS; j++) {
-      matrix_rotated[i][j] = 0;
     }
   }
 
@@ -365,6 +393,13 @@ int rotateRight() {
 }
 
 int rotateLeft() {
+  /* reinitialize matrix and matrix rotated */
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      matrix_rotated[i][j] = 0;
+    }
+  }
+  
   int found_col1 = 0, found_col2 = 0;
   int start_col1 = 0, start_col2 = COLUMNS - 1;
 
@@ -395,13 +430,24 @@ int rotateLeft() {
       start_row1++;
     if (found_row2 == 0)
       start_row2--;
-  }
 
-  // TODO
-  // Asta trebuie modificata
+    if (start_row1 >= COLUMNS)
+      return false;
+  }
+  
   for (int i = start_row1; i <= start_row1 + (start_col2 - start_col1); i++) {
     for (int j = start_col1; j <= start_col1 + (start_row2 - start_row1); j++) {
-      matrix_rotated[i][j] = board[start_row2 - (j - start_col1)][start_col2 - (i - start_row1)];
+      if (i >= ROWS || i < 0 || j < 0 || j >= COLUMNS)
+        return false;
+      if (start_row2 - (j - start_col1) < 0 || start_row2 - (j - start_col1) >= ROWS)
+        return false;
+      if (start_col1 + (i - start_row1) < 0 || start_col1 + (i - start_row1) >= COLUMNS)
+        return false;
+    
+      matrix_rotated[i][j] = board[start_row2 - (j - start_col1)][start_col1 + (i - start_row1)];
+    
+      if (matrix_rotated[i][j] == 1)
+        return false;
     }
   }
 
@@ -412,13 +458,6 @@ int rotateLeft() {
       if (matrix_rotated[i][j] == 2) {
         board[i][j] = 2;
       }
-    }
-  }
-  
-  /* reinitialize matrix and matrix rotated */
-  for (int i = 0; i < ROWS; i++) {
-    for (int j = 0; j < COLUMNS; j++) {
-      matrix_rotated[i][j] = 0;
     }
   }
 
@@ -544,13 +583,9 @@ void movePieces() {
       MovePieceRight();
     }
   } else if (left_rotate == 1) {
-    if (checkRotate()) {
-      rotateLeft();
-    }
+    if (rotateLeft()){}
   } else if (right_rotate == 1) {
-    if (checkRotate()) {
-      rotateRight();
-    }
+    if (rotateRight()){}
   }
   if (checkIntersectionOfPiece()) {
     stopPiece();
