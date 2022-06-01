@@ -2,8 +2,9 @@
 #include <MD_Parola.h>
 #include <MD_MAX72xx.h>
 #include <SPI.h>
+#include <Servo.h>
 /* for LCD */
-#include <Wire.h> 
+#include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
 // Define hardware type, size, and output pins:
@@ -24,8 +25,7 @@ MD_MAX72XX myDisplay = MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_
 #define ROTATE_RIGHT 50
 #define START_STOP 52
 
-#define PIN1_MOTOR 9
-#define PIN2_MOTOR 10
+#define MOTOR_PIN 8
 
 /* lcd display */
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -72,6 +72,10 @@ int right_rotate;
 int start_stop;
 /* used for play/pause */
 int continue_button;
+
+/* servo motor */
+Servo servo;
+int angle = 0;
 
 /* the score of a game */
 int score;
@@ -128,6 +132,8 @@ void setup() {
 
   speed_pieces = analogRead(POTENTIOMETER);
 
+  score = 0;
+
   /* begin lcd */
   lcd.init();
   lcd.init();
@@ -138,36 +144,36 @@ void setup() {
   lcd.setCursor(0, 1);
   lcd.print("your difficulty");
 
-  /* set up the motor */
-  pinMode(PIN1_MOTOR, OUTPUT);
-  pinMode(PIN2_MOTOR, OUTPUT);
-
-  analogWrite(PIN1_MOTOR, 0);
-  analogWrite(PIN2_MOTOR, 0);
+  /* set up the servomotor */
+  servo.attach(MOTOR_PIN);
+  servo.write(angle);
 }
 
 void loop() {
   if (game_started == 0) {
+    angle = 0;
+    servo.write(angle);
     int potentiometer_value = analogRead(POTENTIOMETER);
     
     if (abs(potentiometer_value - speed_pieces) > 10) {
+      delay(10);
       lcd.clear();
       lcd.setCursor(6, 0);
       if (potentiometer_value <= 333) {
         lcd.print("EASY");
-        difficulty_speed = 800;
-        win_score = 3;
+        difficulty_speed = 300;
+        win_score = 1;
       } else if (potentiometer_value > 333 && potentiometer_value <= 666) {
         lcd.print("MEDIUM");
-        difficulty_speed = 400;
-        win_score = 5;
+        difficulty_speed = 150;
+        win_score = 2;
       } else {
         lcd.print("HARD");
-        difficulty_speed = 100;
-        win_score = 7;
+        difficulty_speed = 50;
+        win_score = 3;
       }
       lcd.setCursor(2, 1);
-      lcd.print("Press Start"); 
+      lcd.print("Press Start");
     }
 
     start_stop = digitalRead(START_STOP);
@@ -183,6 +189,7 @@ void loop() {
 
       /* didn't lost or won yet */
       win_lose = 0;
+      delay(100);
     }
   } else {
     start_stop = digitalRead(START_STOP);
@@ -193,6 +200,7 @@ void loop() {
         lcd.setCursor(0, 1);
         lcd.print("Game Paused");
         continue_button = digitalRead(START_STOP);
+        delay(100);
       }
       lcd.clear();
       lcd.setCursor(0, 0);
@@ -220,7 +228,7 @@ void loop() {
       reset_game();
     }
 
-    if (win_score == 2) {
+    if (win_score == -1) {
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print("Bad Luck...");
@@ -256,19 +264,12 @@ void loop() {
 }
 
 void givePrize() {
-  int time_begin = millis();
-
-  analogWrite(PIN1_MOTOR, 0);
-  analogWrite(PIN2_MOTOR, 150);
-
-  delay(200);
-  time_begin = millis();
-  analogWrite(PIN1_MOTOR, 150);
-  analogWrite(PIN2_MOTOR, 0);
-
-  delay(200);
-  analogWrite(PIN1_MOTOR, 0);
-  analogWrite(PIN2_MOTOR, 0);
+  // scan from 0 to 150 degrees
+  for(angle = 0; angle < 120; angle++)  
+  {                                  
+    servo.write(angle);               
+    delay(15);                   
+  }
 }
 
 void reset_game() {
@@ -577,15 +578,19 @@ void movePieces() {
   if (left_move == 1) {
     if (checkLeftMove()) {
       MovePieceLeft();
+      delay(100);
     }
   } else if (right_move == 1) {
     if (checkRightMove()) {
       MovePieceRight();
+      delay(100);
     }
   } else if (left_rotate == 1) {
     if (rotateLeft()){}
+    delay(100);
   } else if (right_rotate == 1) {
     if (rotateRight()){}
+    delay(100);
   }
   if (checkIntersectionOfPiece()) {
     stopPiece();
@@ -639,7 +644,7 @@ void putPieceInMatrix() {
   int iterator = 0;
 
   if (checkIfLost())
-    win_score = 2;
+    win_score = -1;
 
   for (int i = 0; i < piece_mov.size_piece; i++) {
     piece_mov.y[i] -= piece_mov.horizontal;
